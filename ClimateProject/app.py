@@ -15,14 +15,23 @@ def load_data():
     file_path = os.path.join(base_path, 'data', 'weather_data.csv')
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
-        df.columns = df.columns.str.strip() # Clean column names
+        df.columns = df.columns.str.strip()
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'])
-            df['Month'] = df['Date'].dt.strftime('%b')
             df['Month_Num'] = df['Date'].dt.month
+            df['Month'] = df['Date'].dt.strftime('%b')
+            
+            # --- ADD THIS SEASON LOGIC ---
+            def get_season(month):
+                if month in [12, 1, 2]: return "Winter"
+                elif month in [3, 4, 5]: return "Summer"
+                elif month in [6, 7, 8, 9]: return "Monsoon"
+                else: return "Post-Monsoon"
+            
+            df['Season'] = df['Month_Num'].apply(get_season)
+            # ----------------------------
         return df
     return None
-
 # --- 3. SIDEBAR NAVIGATION ---
 st.sidebar.title("☁️ Indian Climate Dashboard")
 page = st.sidebar.radio("Navigate", ["Historical Analysis", "Live Prediction"])
@@ -39,13 +48,14 @@ if df is not None:
         st.title("📊 Historical Climate Analysis")
         
         # Filters
-        col_a, col_b = st.columns(2)
-        with col_a:
-            selected_cities = st.multiselect("Select Cities", df['City'].unique(), default=df['City'].unique()[:3])
-        with col_b:
-            season_list = ["All Seasons"] + list(df['State'].unique()) if 'State' in df.columns else ["All Seasons"]
-            st.selectbox("Filter by Region", season_list)
+  with col_b:
+            # We now use the 'Season' column we just created
+            available_seasons = ["All Seasons"] + list(df['Season'].unique())
+            selected_season = st.selectbox("Filter by Season", available_seasons)
 
+        # Apply the Season Filter to your data
+        if selected_season != "All Seasons":
+            filtered_df = filtered_df[filtered_df['Season'] == selected_season]
         filtered_df = df[df['City'].isin(selected_cities)]
         
         # KPIs
