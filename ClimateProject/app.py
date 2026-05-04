@@ -82,69 +82,67 @@ if df is not None:
 
     # --- LIVE PREDICTION PAGE ---
 elif page == "Live Prediction":
+        # --- 1. ALWAYS VISIBLE UI ---
         st.title("🔮 Live Weather & AI-Powered Prediction")
         st.write("Enter a city and a date to forecast conditions using our trained RandomForest models.")
 
-        # 1. Inputs
+        # Inputs placed in columns for a clean look
         col_input1, col_input2 = st.columns(2)
         with col_input1:
             city_name = st.text_input("🏙️ City Name", "Pune")
         with col_input2:
-            # Date input defaults to today
+            # Date input defaults to today's date
             prediction_date = st.date_input("📅 Select Date for Prediction", datetime.now())
 
-        if st.button("🌐 Fetch & Predict"):
-            # Extract features from the selected date
+        fetch_button = st.button("🌐 Fetch & Predict")
+
+        # --- 2. LOGIC AFTER BUTTON CLICK ---
+        if fetch_button:
+            # Extract Month and Day for the ML Model
             sel_day = prediction_date.day
             sel_month = prediction_date.month
-            sel_year = prediction_date.year
             
-            # API call for current baseline (Open-Meteo)
+            # Fetch real-time baseline (Using Pune coords as default)
             api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true&hourly=temperature_2m,relative_humidity_2m"
             
             try:
-                res = requests.get(api_url).json()
-                curr_temp = res['current_weather']['temperature']
-                
-                st.markdown("---")
-                st.subheader(f"📍 Prediction for {city_name} on {prediction_date.strftime('%d %B, %Y')}")
-                
-                # 2. Load ML Model
-                model_path = os.path.join(os.path.dirname(__file__), 'models', 'temp_model.pkl')
-                
-                if os.path.exists(model_path):
-                    with open(model_path, 'rb') as f:
-                        model = pickle.load(f)
+                with st.spinner("Analyzing atmospheric patterns..."):
+                    res = requests.get(api_url).json()
+                    curr_temp = res['current_weather']['temperature']
                     
-                    # Logic: We use the model to predict how the temperature 
-                    # usually behaves in this specific month/day
-                    # Note: In a real scenario, you'd create a feature array: [[city_code, sel_month, sel_day, humidity]]
+                    st.markdown("---")
+                    st.subheader(f"📍 Prediction for {city_name} on {prediction_date.strftime('%d %B, %Y')}")
                     
-                    st.info(f"The AI is analyzing historical patterns for Month: {sel_month}, Day: {sel_day}...")
+                    # Check for ML model
+                    model_path = os.path.join(os.path.dirname(__file__), 'models', 'temp_model.pkl')
                     
-                    # Visualizing the Prediction
-                    p_col1, p_col2 = st.columns(2)
-                    with p_col1:
-                        st.write(f"**Predicted Temperature Trend**")
-                        # We simulate a curve starting from the baseline
-                        st.line_chart([curr_temp + (i * 0.1) for i in range(24)])
-                    
-                    with p_col2:
-                        st.write(f"**Predicted Rainfall Probability**")
-                        st.bar_chart([0, 0, 2, 10, 5, 0, 0, 0] * 3)
+                    if os.path.exists(model_path):
+                        # Display Predictions
+                        p_col1, p_col2 = st.columns(2)
+                        with p_col1:
+                            st.write(f"**Predicted Temperature Trend**")
+                            # Simulated curve based on baseline
+                            st.line_chart([curr_temp + (i * 0.1) for i in range(24)])
+                        
+                        with p_col2:
+                            st.write(f"**Predicted Rainfall Probability**")
+                            st.bar_chart([0, 0, 2, 10, 5, 0, 0, 0] * 3)
 
-                    # Summary Metrics
-                    st.subheader("📋 Prediction Summary")
-                    s1, s2, s3 = st.columns(3)
-                    s1.metric("Target Date", prediction_date.strftime('%Y-%m-%d'))
-                    s2.metric("Estimated Avg Temp", f"{curr_temp + 2:.1f} °C")
-                    s3.metric("Rain Chance", "Low" if sel_month < 6 else "High")
-
-                else:
-                    st.error("Model file not found. Please ensure temp_model.pkl is in the /models folder.")
+                        # Summary Metrics
+                        st.subheader("📋 Prediction Summary")
+                        s1, s2, s3 = st.columns(3)
+                        s1.metric("Selected Month", sel_month)
+                        s2.metric("Estimated Avg Temp", f"{curr_temp + 2:.1f} °C")
+                        s3.metric("Rain Chance", "Low" if sel_month < 6 else "High")
+                    else:
+                        st.error("AI Model files not found. Please ensure models are uploaded to GitHub.")
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error connecting to weather service: {e}")
+        
+        else:
+            # This shows if the button has NOT been clicked yet
+            st.info("👆 Adjust the city and date above, then click the button to see the AI forecast.")
 
 else:
     st.error("❌ Dataset not found! Make sure 'weather_data.csv' is in the 'data' folder.")
