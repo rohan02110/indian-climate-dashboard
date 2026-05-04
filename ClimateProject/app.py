@@ -12,29 +12,35 @@ st.set_page_config(page_title="Indian Climate Dashboard", layout="wide")
 
 # --- 2. DATA LOADING LOGIC (ZIP COMPATIBLE) ---
 @st.cache_data
+@st.cache_data
 def load_data():
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    # Path to the zip file in your /data folder
-    zip_path = os.path.join(base_path, 'data', 'weather_data.zip')
-    
-    if os.path.exists(zip_path):
-        # Pandas can read the CSV directly from the ZIP!
-        df = pd.read_csv(zip_path)
-        df.columns = df.columns.str.strip()
-        
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'])
-            df['Month_Num'] = df['Date'].dt.month
-            df['Month'] = df['Date'].dt.strftime('%b')
+    try:
+        # Check if the zip file exists
+        if os.path.exists('data/weather_data.zip'):
+            # This handles reading from a zip even if there are nested folders
+            df = pd.read_csv('data/weather_data.zip')
+            df.columns = df.columns.str.strip()
             
-            def get_season(month):
-                if month in [12, 1, 2]: return "Winter"
-                elif month in [3, 4, 5]: return "Summer"
-                elif month in [6, 7, 8, 9]: return "Monsoon"
-                else: return "Post-Monsoon"
-            df['Season'] = df['Month_Num'].apply(get_season)
-        return df
-    return None
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+                df['Month_Num'] = df['Date'].dt.month
+                df['Month'] = df['Date'].dt.strftime('%b')
+                
+                def get_season(month):
+                    if month in [12, 1, 2]: return "Winter"
+                    elif month in [3, 4, 5]: return "Summer"
+                    elif month in [6, 7, 8, 9]: return "Monsoon"
+                    else: return "Post-Monsoon"
+                df['Season'] = df['Month_Num'].apply(get_season)
+            return df
+        else:
+            # This will show up on your website to tell us WHY it's failing
+            st.error(f"Looking for: {os.path.abspath('data/weather_data.zip')}")
+            st.write("Files found in /data folder:", os.listdir('data') if os.path.exists('data') else "Data folder not found")
+            return None
+    except Exception as e:
+        st.error(f"Error loading zip: {e}")
+        return None
 
 # --- 3. SIDEBAR NAVIGATION ---
 st.sidebar.title("☁️ Indian Climate Dashboard")
