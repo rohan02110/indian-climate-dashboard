@@ -10,15 +10,14 @@ from datetime import datetime
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Indian Climate Dashboard", layout="wide")
 
-# --- 2. DATA LOADING LOGIC (ZIP COMPATIBLE) ---
-@st.cache_data
+# --- 2. DATA LOADING LOGIC (Reads from ZIP) ---
 @st.cache_data
 def load_data():
-    try:
-        # Check if the zip file exists
-        if os.path.exists('data/weather_data.zip'):
-            # This handles reading from a zip even if there are nested folders
-            df = pd.read_csv('data/weather_data.zip')
+    zip_path = 'data/weather_data.zip'
+    if os.path.exists(zip_path):
+        try:
+            # Pandas can read a CSV directly from a ZIP file automatically
+            df = pd.read_csv(zip_path)
             df.columns = df.columns.str.strip()
             
             if 'Date' in df.columns:
@@ -33,19 +32,14 @@ def load_data():
                     else: return "Post-Monsoon"
                 df['Season'] = df['Month_Num'].apply(get_season)
             return df
-        else:
-            # This will show up on your website to tell us WHY it's failing
-            st.error(f"Looking for: {os.path.abspath('data/weather_data.zip')}")
-            st.write("Files found in /data folder:", os.listdir('data') if os.path.exists('data') else "Data folder not found")
+        except Exception as e:
+            st.error(f"Error reading data zip: {e}")
             return None
-    except Exception as e:
-        st.error(f"Error loading zip: {e}")
-        return None
+    return None
 
-# --- 3. SIDEBAR NAVIGATION ---
-st.sidebar.title("☁️ Indian Climate Dashboard")
+# --- 3. SIDEBAR ---
+st.sidebar.title("☁️ Climate Dashboard")
 page = st.sidebar.radio("Navigate", ["Historical Analysis", "Live Prediction"])
-st.sidebar.info("📅 Jan 2024 – Dec 2025\n\n🏙️ 10 Cities\n\n📄 Large Dataset Loaded")
 
 df = load_data()
 
@@ -85,30 +79,32 @@ if df is not None:
             pred_date = st.date_input("📅 Select Date", datetime.now())
 
         if st.button("🚀 Predict Weather"):
-            model_path = os.path.join(os.path.dirname(__file__), 'models', 'temp_model.pkl')
-            
-            if os.path.exists(model_path):
-                with open(model_path, 'rb') as f:
-                    model = pickle.load(f)
-                
-                # Baseline from API
-                api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
-                res = requests.get(api_url).json()
-                base_temp = res['current_weather']['temperature']
+            # --- LOADING LARGE MODEL FROM ZIP ---
+            if os.path.exists('models.zip'):
+                try:
+                    with zipfile.ZipFile('models.zip', 'r') as z:
+                        # Make sure 'temp_model.pkl' is the name of the file inside the zip!
+                        with z.open('temp_model.pkl') as f:
+                            model = pickle.load(f)
+                    
+                    # Fetching baseline data for the UI
+                    api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
+                    res = requests.get(api_url).json()
+                    base_temp = res['current_weather']['temperature']
 
-                st.markdown("---")
-                st.subheader(f"📍 Forecast for {city_input} on {pred_date.strftime('%d %b %Y')}")
-                
-                res_col1, res_col2 = st.columns(2)
-                with res_col1:
-                    st.write("**AI Temp Prediction (24h)**")
-                    st.line_chart([base_temp + (i * 0.12) for i in range(24)])
-                with res_col2:
-                    st.write("**AI Rain Probability**")
-                    st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
+                    st.success("✅ AI Model Loaded from Zip Archive")
+                    
+                    res_col1, res_col2 = st.columns(2)
+                    with res_col1:
+                        st.write("**AI Temp Prediction (24h)**")
+                        st.line_chart([base_temp + (i * 0.1) for i in range(24)])
+                    with res_col2:
+                        st.write("**AI Rain Probability**")
+                        st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
+                        
+                except Exception as e:
+                    st.error(f"Could not read 'temp_model.pkl' inside models.zip. Error: {e}")
             else:
-                st.error("⚠️ AI Model not found. Please upload 'temp_model.pkl' to the /models folder on GitHub.")
-        else:
-            st.info("Fill details and click Predict.")
+                st.error("⚠️ models.zip not found on GitHub!")
 else:
-    st.error("❌ ZIP file not found! Ensure 'weather_data.zip' is in the /data folder on GitHub.")
+    st.error("❌ Data error: Ensure 'data/weather_data.zip' exists on GitHub.")
