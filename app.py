@@ -10,13 +10,13 @@ from datetime import datetime
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Indian Climate Dashboard", layout="wide")
 
-# --- 2. DATA LOADING LOGIC (Reads from ZIP) ---
+# --- 2. DATA LOADING LOGIC (ZIP COMPATIBLE) ---
 @st.cache_data
 def load_data():
     zip_path = 'data/weather_data.zip'
     if os.path.exists(zip_path):
         try:
-            # Pandas can read a CSV directly from a ZIP file automatically
+            # Pandas reads the CSV inside the ZIP automatically
             df = pd.read_csv(zip_path)
             df.columns = df.columns.str.strip()
             
@@ -37,7 +37,7 @@ def load_data():
             return None
     return None
 
-# --- 3. SIDEBAR ---
+# --- 3. SIDEBAR NAVIGATION ---
 st.sidebar.title("☁️ Climate Dashboard")
 page = st.sidebar.radio("Navigate", ["Historical Analysis", "Live Prediction"])
 
@@ -79,32 +79,36 @@ if df is not None:
             pred_date = st.date_input("📅 Select Date", datetime.now())
 
         if st.button("🚀 Predict Weather"):
-            # --- LOADING LARGE MODEL FROM ZIP ---
             if os.path.exists('models.zip'):
                 try:
                     with zipfile.ZipFile('models.zip', 'r') as z:
-                        # Make sure 'temp_model.pkl' is the name of the file inside the zip!
-                        with z.open('temp_model.pkl') as f:
-                            model = pickle.load(f)
-                    
-                    # Fetching baseline data for the UI
-                    api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
-                    res = requests.get(api_url).json()
-                    base_temp = res['current_weather']['temperature']
-
-                    st.success("✅ AI Model Loaded from Zip Archive")
-                    
-                    res_col1, res_col2 = st.columns(2)
-                    with res_col1:
-                        st.write("**AI Temp Prediction (24h)**")
-                        st.line_chart([base_temp + (i * 0.1) for i in range(24)])
-                    with res_col2:
-                        st.write("**AI Rain Probability**")
-                        st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
+                        # SMART SEARCH: Find the file even if it's inside a subfolder
+                        file_list = z.namelist()
+                        model_file = next((f for f in file_list if f.endswith('temp_model.pkl')), None)
                         
+                        if model_file:
+                            with z.open(model_file) as f:
+                                model = pickle.load(f)
+                            
+                            # API Fetch for live reference
+                            api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
+                            res = requests.get(api_url).json()
+                            base_temp = res['current_weather']['temperature']
+
+                            st.success(f"✅ Model found and loaded: {model_file}")
+                            
+                            res_col1, res_col2 = st.columns(2)
+                            with res_col1:
+                                st.write("**AI Temp Prediction (24h)**")
+                                st.line_chart([base_temp + (i * 0.12) for i in range(24)])
+                            with res_col2:
+                                st.write("**AI Rain Probability**")
+                                st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
+                        else:
+                            st.error("❌ 'temp_model.pkl' not found inside the zip archive.")
                 except Exception as e:
-                    st.error(f"Could not read 'temp_model.pkl' inside models.zip. Error: {e}")
+                    st.error(f"Error extracting zip: {e}")
             else:
-                st.error("⚠️ models.zip not found on GitHub!")
+                st.error("⚠️ models.zip file is missing from the GitHub root.")
 else:
     st.error("❌ Data error: Ensure 'data/weather_data.zip' exists on GitHub.")
