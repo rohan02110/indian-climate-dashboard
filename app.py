@@ -10,21 +10,18 @@ from datetime import datetime
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Indian Climate Dashboard", layout="wide")
 
-# --- 2. DATA LOADING LOGIC (ZIP COMPATIBLE) ---
+# --- 2. DATA LOADING LOGIC ---
 @st.cache_data
 def load_data():
     zip_path = 'data/weather_data.zip'
     if os.path.exists(zip_path):
         try:
-            # Pandas reads the CSV inside the ZIP automatically
             df = pd.read_csv(zip_path)
             df.columns = df.columns.str.strip()
-            
             if 'Date' in df.columns:
                 df['Date'] = pd.to_datetime(df['Date'])
                 df['Month_Num'] = df['Date'].dt.month
                 df['Month'] = df['Date'].dt.strftime('%b')
-                
                 def get_season(month):
                     if month in [12, 1, 2]: return "Winter"
                     elif month in [3, 4, 5]: return "Summer"
@@ -33,17 +30,39 @@ def load_data():
                 df['Season'] = df['Month_Num'].apply(get_season)
             return df
         except Exception as e:
-            st.error(f"Error reading data zip: {e}")
-            return None
+            st.error(f"Error reading data: {e}")
     return None
 
-# --- 3. SIDEBAR NAVIGATION ---
-st.sidebar.title("☁️ Climate Dashboard")
+# --- 3. SIDEBAR (NAVIGATION & INFO) ---
+st.sidebar.title("☁️ Indian Climate Dashboard")
 page = st.sidebar.radio("Navigate", ["Historical Analysis", "Live Prediction"])
 
-df = load_data()
+st.sidebar.markdown("---")
+
+# DATASET OVERVIEW BLOCK
+st.sidebar.subheader("Dataset Overview")
+with st.sidebar.container():
+    st.sidebar.info("""
+    📅 **Jan 2024 – Dec 2025**
+    
+    🏙️ **10 cities**
+    
+    📄 **7,310 records**
+    """)
+
+st.sidebar.markdown("---")
+
+# MODEL INFO BLOCK
+st.sidebar.subheader("Model Info")
+st.sidebar.markdown("""
+* **RandomForest — Rainfall**
+* **RandomForest — Temperature**
+* **Features:** Temp • Humidity • Month • Season
+""")
 
 # --- 4. MAIN APP LOGIC ---
+df = load_data()
+
 if df is not None:
     if page == "Historical Analysis":
         st.title("📊 Historical Climate Analysis")
@@ -82,7 +101,6 @@ if df is not None:
             if os.path.exists('models.zip'):
                 try:
                     with zipfile.ZipFile('models.zip', 'r') as z:
-                        # SMART SEARCH: Find the file even if it's inside a subfolder
                         file_list = z.namelist()
                         model_file = next((f for f in file_list if f.endswith('temp_model.pkl')), None)
                         
@@ -90,12 +108,11 @@ if df is not None:
                             with z.open(model_file) as f:
                                 model = pickle.load(f)
                             
-                            # API Fetch for live reference
                             api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
                             res = requests.get(api_url).json()
                             base_temp = res['current_weather']['temperature']
 
-                            st.success(f"✅ Model found and loaded: {model_file}")
+                            st.success(f"✅ AI Model successfully loaded.")
                             
                             res_col1, res_col2 = st.columns(2)
                             with res_col1:
@@ -105,10 +122,10 @@ if df is not None:
                                 st.write("**AI Rain Probability**")
                                 st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
                         else:
-                            st.error("❌ 'temp_model.pkl' not found inside the zip archive.")
+                            st.error("❌ 'temp_model.pkl' not found inside the zip.")
                 except Exception as e:
                     st.error(f"Error extracting zip: {e}")
             else:
-                st.error("⚠️ models.zip file is missing from the GitHub root.")
+                st.error("⚠️ models.zip is missing.")
 else:
-    st.error("❌ Data error: Ensure 'data/weather_data.zip' exists on GitHub.")
+    st.error("❌ Data error: Check 'data/weather_data.zip' on GitHub.")
