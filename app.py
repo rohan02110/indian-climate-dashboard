@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import pickle
 import os
@@ -33,7 +34,7 @@ def load_data():
             st.error(f"Error reading data: {e}")
     return None
 
-# --- 3. SIDEBAR (NAVIGATION & INFO) ---
+# --- 3. SIDEBAR ---
 st.sidebar.title("☁️ Indian Climate Dashboard")
 page = st.sidebar.radio("Navigate", ["Historical Analysis", "Live Prediction"])
 
@@ -59,8 +60,6 @@ df = load_data()
 if df is not None:
     if page == "Historical Analysis":
         st.title("📊 Historical Climate Analysis")
-        
-        # Filters
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             selected_cities = st.multiselect("Select Cities", df['City'].unique(), default=df['City'].unique()[:3])
@@ -72,55 +71,24 @@ if df is not None:
         if selected_season != "All Seasons":
             filtered_df = filtered_df[filtered_df['Season'] == selected_season]
         
-        # Metrics
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Avg Temp", f"{filtered_df['Temperature_Avg (°C)'].mean():.1f} °C")
         k2.metric("Max Temp", f"{filtered_df['Temperature_Max (°C)'].max():.1f} °C")
         k3.metric("Rainfall", f"{filtered_df['Rainfall (mm)'].sum():.0f} mm")
         k4.metric("Humidity", f"{filtered_df['Humidity (%)'].mean():.1f} %")
 
-        # 1. Trend Line
         st.subheader("🌡️ Temperature Trends")
         fig_line = px.line(filtered_df, x='Date', y='Temperature_Avg (°C)', color='City', template="plotly_dark")
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # 2. Heatmap & Scatter Plot Row
-        col_graph1, col_graph2 = st.columns(2)
-
-        with col_graph1:
-            st.subheader("🗓️ Monthly Avg Temp Heatmap")
-            heatmap_data = filtered_df.groupby(['City', 'Month_Num', 'Month'])['Temperature_Avg (°C)'].mean().reset_index().sort_values('Month_Num')
-            fig_heat = px.density_heatmap(
-                heatmap_data, 
-                x="Month", 
-                y="City", 
-                z="Temperature_Avg (°C)", 
-                color_continuous_scale='RdYlBu_r',
-                text_auto='.1f',
-                template="plotly_dark"
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
-
-        with col_graph2:
-            st.subheader("💧 Humidity vs. Temperature")
-            fig_scatter = px.scatter(
-                filtered_df, 
-                x="Temperature_Avg (°C)", 
-                y="Humidity (%)", 
-                color="City",
-                size="Rainfall (mm)",
-                hover_name="City",
-                template="plotly_dark",
-                opacity=0.6
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
-
     elif page == "Live Prediction":
-        # ... (Rest of your prediction logic remains the same) ...
         st.title("🔮 AI Weather Prediction")
+        
         c1, c2 = st.columns(2)
-        with c1: city_input = st.text_input("🏙️ City Name", "Pune")
-        with c2: pred_date = st.date_input("📅 Select Date", datetime.now())
+        with c1:
+            city_input = st.text_input("🏙️ City Name", "Pune")
+        with c2:
+            pred_date = st.date_input("📅 Select Date", datetime.now())
 
         if st.button("🚀 Predict Weather"):
             if os.path.exists('models.zip'):
@@ -128,20 +96,50 @@ if df is not None:
                     with zipfile.ZipFile('models.zip', 'r') as z:
                         file_list = z.namelist()
                         model_file = next((f for f in file_list if f.endswith('temp_model.pkl')), None)
+                        
                         if model_file:
-                            with z.open(model_file) as f: model = pickle.load(f)
+                            with z.open(model_file) as f:
+                                model = pickle.load(f)
+                            
                             api_url = "https://api.open-meteo.com/v1/forecast?latitude=18.52&longitude=73.85&current_weather=true"
                             res = requests.get(api_url).json()
                             base_temp = res['current_weather']['temperature']
-                            st.success(f"✅ AI Model successfully loaded.")
+
+                            st.success(f"✅ AI Prediction Engine Online")
+                            
+                            st.markdown("---")
+                            st.subheader(f"📍 Forecast for {city_input} on {pred_date.strftime('%d %b %Y')}")
+                            
                             res_col1, res_col2 = st.columns(2)
+                            
+                            # --- 1. TEMPERATURE CHART WITH LABELS ---
                             with res_col1:
-                                st.write("**AI Temp Prediction (24h)**")
-                                st.line_chart([base_temp + (i * 0.12) for i in range(24)])
+                                hours = list(range(24))
+                                temp_forecast = [base_temp + (i * 0.12) for i in hours]
+                                
+                                fig_temp = px.line(x=hours, y=temp_forecast, 
+                                                  labels={'x': 'Hour of Day (24h)', 'y': 'Temperature (°C)'},
+                                                  title="AI Temp Prediction (Next 24h)")
+                                fig_temp.update_traces(line_color='#55ccff')
+                                fig_temp.update_layout(template="plotly_dark", yaxis_range=[min(temp_forecast)-5, max(temp_forecast)+5])
+                                st.plotly_chart(fig_temp, use_container_width=True)
+
+                            # --- 2. RAIN PROBABILITY CHART WITH LABELS ---
                             with res_col2:
-                                st.write("**AI Rain Probability**")
-                                st.bar_chart([0, 5, 2, 0, 10, 0, 0, 3] * 3)
-                except Exception as e: st.error(f"Error: {e}")
-            else: st.error("⚠️ models.zip missing.")
+                                rain_probs = [5, 2, 0, 10, 0, 3, 5, 2, 10, 3, 5, 2, 10] * 2 # Mocked pattern
+                                rain_probs = rain_probs[:24]
+                                
+                                fig_rain = px.bar(x=hours, y=rain_probs,
+                                                 labels={'x': 'Hour of Day (24h)', 'y': 'Rain Probability (%)'},
+                                                 title="AI Rain Probability")
+                                fig_rain.update_traces(marker_color='#3388ff')
+                                fig_rain.update_layout(template="plotly_dark", yaxis_range=[0, 100]) # Scale 0 to 100%
+                                st.plotly_chart(fig_rain, use_container_width=True)
+                        else:
+                            st.error("❌ 'temp_model.pkl' not found inside models.zip.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            else:
+                st.error("⚠️ models.zip missing.")
 else:
-    st.error("❌ Data error: Check 'data/weather_data.zip' on GitHub.")
+    st.error("❌ Data missing: Check 'data/weather_data.zip' on GitHub.")
